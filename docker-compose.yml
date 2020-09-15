@@ -1,0 +1,19 @@
+version: '3'
+services:
+  data-gsmap:
+    container_name: data-gsmap_master
+    build: .
+    image: data-gsmap:latest
+#    runtime: nvidia
+#    environment:
+#      - NVIDIA_VISIBLE_DEVICES=all
+#      - ./web.env
+#    command: nvidia-smi
+    tty: true
+    command: /bin/bash
+    volumes:
+      - .:/src
+    ports:
+      - "8008:8008"
+      - "6006:6006"
+      - "6007:6007"
