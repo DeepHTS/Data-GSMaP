@@ -15,8 +15,10 @@ import pycrs
 
 from src.helper import argwrapper, imap_unordered_bar, transfer_to_s3
 
-DIR_PARENT_RAW_LOCAL = 'data/raw'
-DIR_PARENT_CONVERTED_LOCAL = 'data/converted'
+DIR_PARENT_RAW_LOCAL = 'data/GSMaP/raw'
+DIR_PARENT_CONVERTED_LOCAL = 'data/GSMaP/converted'
+DIR_PARENT_PICKED = 'data/GSMaP/picked'
+
 FTP_ADDRESS_JAXA = 'ftp.gportal.jaxa.jp'
 HDF_EXT = ['.h5', '.hdf', '.HDF']
 ESPG_GRID = 4326
@@ -38,6 +40,7 @@ CATEGORY_REALTIME_GSMAP = 'nrt'
 PROJECT_GSMAP = 'GSMaP'
 SENSOR_HOURLY_GSMAP = '3.GSMAP.H'
 SENSOR_MONTHLY_GSMAP = '3.GSMAP.M'
+
 
 def init(*credentials):
     """ set variable of FTP connection as global variable for multiprocessing
@@ -114,9 +117,9 @@ class DataManagerJAXABase(object):
         if not os.path.exists(dir_local):
             os.makedirs(dir_local)
 
-        # download from FTP to local
-        if 'ftp' not in globals():
-            ftp = FTP(self.ftp_address, user=self.user, passwd='anonymous')
+        # # download from FTP to local
+        # if self.processes == 1:
+        #     ftp = FTP(self.ftp_address, user=self.user, passwd='anonymous')
 
         try:
             with open(path_local, 'wb') as f:
@@ -419,10 +422,12 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
     def _exec_get_raster(self, ftp_path, convert_to_gtiff=True, list_band_filter=['//Grid/monthlyPrecipRate'],
                          pick_part=True,
                          x_min=120.61, y_min=22.29, x_max=151.35, y_max=46.8, epsg_code=4326, area_name='japan',
-                         dir_out='data/picked', keep_temp_files=True,
+                         dir_parent_picked_local=DIR_PARENT_PICKED,
                          save_s3=False, dir_s3_parent=None, remove_local_files=False, s3_bucket_name=None):
-        out_path = []
+
+        list_out_path = []
         path_local = self.download_from_ftp(ftp_path)
+
         if convert_to_gtiff:
             list_path_converted = self.convert_from_hdf_to_gtiff(path_local, list_band_filter=list_band_filter)
             if pick_part:
@@ -430,51 +435,72 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
                 for path_converted in list_path_converted:
                     filename = os.path.basename(path_converted)
                     filename = os.path.splitext(filename)[0] + '-' + area_name + os.path.splitext(filename)[1]
-                    path_converted_out = os.path.join(dir_out, filename)
+                    path_converted_out = os.path.join(dir_parent_picked_local, filename)
                     pick_part_raster(path_converted, path_converted_out, shapes)
-                    if not keep_temp_files:
-                        os.remove(path_converted)
-                    out_path.append(path_converted_out)
-            else:
-                out_path = list_path_converted
-            if not keep_temp_files:
-                os.remove(path_local)
+                    list_out_path.append(path_converted_out)
         else:
-            out_path = [path_local]
+            list_path_converted = []
 
         if save_s3:
-            for path in out_path:
-                transfer_to_s3(path, dir_local_parent=dir_out, dir_s3_parent=dir_s3_parent,
-                               remove_local_file=remove_local_files,
-                               multiprocessing=self.processes > 1, s3_bucket_name=s3_bucket_name)
+            if dir_s3_parent is None:
+                dir_parent_raw_s3 = str(self.dir_parent_raw_local)
+                dir_parent_converted_s3 = str(self.dir_parent_converted_local)
+                dir_parent_picked_s3 = str(dir_parent_picked_local)
+            else:
+                dir_parent_raw_s3 = os.path.join(dir_s3_parent, self.dir_parent_raw_local)
+                dir_parent_converted_s3 = os.path.join(dir_s3_parent, self.dir_parent_converted_local)
+                dir_parent_picked_s3 = os.path.join(dir_s3_parent, dir_parent_picked_local)
 
-        return out_path
+            transfer_to_s3(path_local, dir_local_parent=self.dir_parent_raw_local,
+                           dir_s3_parent=dir_parent_raw_s3,
+                           remove_local_file=remove_local_files,
+                           multiprocessing=self.processes > 1, s3_bucket_name=s3_bucket_name)
+            if len(list_path_converted) > 0:
+                for path_converted in list_path_converted:
+                    transfer_to_s3(path_converted, dir_local_parent=self.dir_parent_converted_local,
+                                   dir_s3_parent=dir_parent_converted_s3,
+                                   remove_local_file=remove_local_files,
+                                   multiprocessing=self.processes > 1, s3_bucket_name=s3_bucket_name)
+            if len(list_out_path) > 0:
+                for path in list_out_path:
+                    transfer_to_s3(path, dir_local_parent=dir_parent_picked_local, dir_s3_parent=dir_parent_picked_s3,
+                                   remove_local_file=remove_local_files,
+                                   multiprocessing=self.processes > 1, s3_bucket_name=s3_bucket_name)
+
+        return []
 
     def get_raster_data(self, category='standard', product='hourly', list_version=None, start_datetime=None,
-                        end_datetime=None, ext=HDF_EXT, convert_to_gtiff=True, list_band_filter=['//Grid/monthlyPrecipRate'],
+                        end_datetime=None, ext=HDF_EXT, convert_to_gtiff=True,
+                        list_band_filter=['//Grid/monthlyPrecipRate'],
                         pick_part=True,
                         x_min=120.61, y_min=22.29, x_max=151.35, y_max=46.8, epsg_code=4326, area_name='japan',
-                        dir_out='data/picked', keep_temp_files=True,
+                        dir_parent_picked_local=DIR_PARENT_PICKED,
                         save_s3=False, dir_s3_parent=None, remove_local_files=False, s3_bucket_name=None
                         ):
         list_ftp_path = self.get_ftp_path_list(category=category, product=product, list_version=list_version,
                                                start_datetime=start_datetime, end_datetime=end_datetime, ext=ext)
 
-        credentials = [self.ftp_address, self.user, 'anonymous']
-        init(*credentials)
+        # credentials = [self.ftp_address, self.user, 'anonymous']
+        # init(*credentials)
+
+        dir_parent_picked_local = os.path.join(dir_parent_picked_local, category, product)
 
         if self.processes == 1:
             list_out_path = []
+            # global ftp
+            # ftp = FTP(self.ftp_address, user=self.user, passwd='anonymous')
             for ftp_path in tqdm(list_ftp_path, total=len(list_ftp_path)):
-                list_out_path.extend(self._exec_get_raster(ftp_path, convert_to_gtiff, list_band_filter, pick_part,
-                                                           x_min, y_min, x_max, y_max, epsg_code, area_name,
-                                                           dir_out, keep_temp_files, save_s3, dir_s3_parent,
-                                                           remove_local_files, s3_bucket_name))
+                self._exec_get_raster(ftp_path, convert_to_gtiff, list_band_filter, pick_part,
+                                      x_min, y_min, x_max, y_max, epsg_code, area_name,
+                                      dir_parent_picked_local, save_s3, dir_s3_parent,
+                                      remove_local_files, s3_bucket_name)
         else:
+            credentials = [self.ftp_address, self.user, 'anonymous']
+            init(*credentials)
             func_args = [(self._exec_get_raster, ftp_path, convert_to_gtiff, list_band_filter, pick_part,
                           x_min, y_min, x_max, y_max, epsg_code, area_name,
-                          dir_out, keep_temp_files,
-                          save_s3, dir_s3_parent, remove_local_files, s3_bucket_name)
+                          dir_parent_picked_local, save_s3, dir_s3_parent,
+                          remove_local_files, s3_bucket_name)
                          for ftp_path in list_ftp_path]
-            list_out_path = imap_unordered_bar(argwrapper, func_args, self.processes, extend=True)
-        return list_out_path
+            imap_unordered_bar(argwrapper, func_args, self.processes, extend=True, init=init, credentials=credentials)
+        return
