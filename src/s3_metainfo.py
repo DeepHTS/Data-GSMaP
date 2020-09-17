@@ -17,6 +17,7 @@ DICT_GSMAP_UNIT = {
     'snowProbability': '%'
 }
 
+EXT = ['.h5', '.hdf', '.HDF', '.tif']
 
 def get_meta_list_GSMaP(s3_bucket_name, s3_dir_parent):
     s3 = boto3.resource('s3')
@@ -31,6 +32,9 @@ def get_meta_list_GSMaP(s3_bucket_name, s3_dir_parent):
     list_dict_meta = []
     for path in tqdm(list_path):
         filename = os.path.basename(path)
+        if os.path.splitext(filename)[-1] not in EXT:
+            continue
+
         filename_part = filename.split('_')
         dict_info = {
             'filename': filename,
