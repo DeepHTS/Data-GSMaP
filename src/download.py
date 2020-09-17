@@ -437,7 +437,7 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
                 shapes = shapes_from_bbox(x_min=x_min, y_min=y_min, x_max=x_max, y_max=y_max, epsg_code=epsg_code)
                 for path_converted in list_path_converted:
                     filename = os.path.basename(path_converted)
-                    filename = os.path.splitext(filename)[0] + '-' + area_name + os.path.splitext(filename)[1]
+                    filename = os.path.splitext(filename)[0] + '_' + area_name + os.path.splitext(filename)[1]
                     path_converted_out = os.path.join(dir_parent_picked_local, filename)
                     pick_part_raster(path_converted, path_converted_out, shapes)
                     list_out_path.append(path_converted_out)

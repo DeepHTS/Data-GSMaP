@@ -6,7 +6,7 @@ Python interpreter: Docker compose -> GPU, Dockerfile -> nonGPU
 ### jupyter
 * Make container for jupyter or playground  
 ```
-$ docker-compose run -p 8003:8003 --name=flight_data_gathering_master_run flight_data_gathering bash
+$ docker-compose run -p 8003:8003 --name=data-gsmap_master_run data-gsmap bash
 ```
 
 * Settings on docker
