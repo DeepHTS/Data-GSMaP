@@ -110,7 +110,7 @@ class DataManagerJAXABase(object):
     #              processes=1):
 
     def download_from_ftp(self, path_ftp='/standard/GSMaP/3.GSMAP.M/03F/2016/GPMMRG_MAP_1601_M_L3S_MCM_03F.h5'):
-        path_local = os.path.join(self.dir_parent_raw_local, path_ftp[1:])
+        path_local = os.path.join(self.dir_parent_raw_local, path_ftp)
 
         # make dir
         dir_local = os.path.dirname(path_local)
@@ -199,7 +199,7 @@ class DataManagerJAXABase(object):
             return dict_path_list
 
         dir_converted_local = os.path.join(self.dir_parent_converted_local,
-                                           path_local.split(self.dir_parent_raw_local)[-1][1:])
+                                           os.path.dirname(path_local).split(self.dir_parent_raw_local)[-1][1:])
 
         hdf_ds = gdal.Open(path_local)
         try:
@@ -211,7 +211,7 @@ class DataManagerJAXABase(object):
         # get all layers
         list_band = [dataset[0].split(':')[-1] for dataset in sub_datasets]
         list_index = self._get_filtered_list(list_band, list_band_filter)
-        print([list_band[index] for index in list_index])
+        # print([list_band[index] for index in list_index])
 
         # check exist dest dir
         if not os.path.exists(dir_converted_local):
@@ -428,6 +428,9 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
         list_out_path = []
         path_local = self.download_from_ftp(ftp_path)
 
+        if not os.path.exists(dir_parent_picked_local):
+            os.makedirs(dir_parent_picked_local)
+
         if convert_to_gtiff:
             list_path_converted = self.convert_from_hdf_to_gtiff(path_local, list_band_filter=list_band_filter)
             if pick_part:
@@ -469,6 +472,24 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
 
         return []
 
+    def _makedirs_from_ftp_path(self, list_ftp_path, convert_to_gtiff=True):
+        list_dirs = []
+        for path_ftp in list_ftp_path:
+            path_local = os.path.join(self.dir_parent_raw_local, path_ftp)
+            list_dirs.append(os.path.dirname(path_local))
+
+            if convert_to_gtiff:
+                dir_converted_local = os.path.join(self.dir_parent_converted_local,
+                                                   os.path.dirname(path_local).split(self.dir_parent_raw_local)[-1][1:])
+                list_dirs.append(dir_converted_local)
+        list_dirs_unique = list(np.unique(list_dirs))
+
+        for dir in list_dirs_unique:
+            if not os.path.exists(dir):
+                os.makedirs(dir)
+
+        return
+
     def get_raster_data(self, category='standard', product='hourly', list_version=None, start_datetime=None,
                         end_datetime=None, ext=HDF_EXT, convert_to_gtiff=True,
                         list_band_filter=['//Grid/monthlyPrecipRate'],
@@ -480,10 +501,15 @@ class DataManagerJAXAGSMaP(DataManagerJAXABase):
         list_ftp_path = self.get_ftp_path_list(category=category, product=product, list_version=list_version,
                                                start_datetime=start_datetime, end_datetime=end_datetime, ext=ext)
 
+        self._makedirs_from_ftp_path(list_ftp_path, convert_to_gtiff=convert_to_gtiff)
+
+        # don't need to touch other coords
         # credentials = [self.ftp_address, self.user, 'anonymous']
         # init(*credentials)
 
         dir_parent_picked_local = os.path.join(dir_parent_picked_local, category, product)
+        if pick_part and not os.path.exists(dir_parent_picked_local):
+            os.makedirs(dir_parent_picked_local)
 
         if self.processes == 1:
             list_out_path = []
