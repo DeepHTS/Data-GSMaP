@@ -1,4 +1,4 @@
-# FlightDataGathering
+# GSMaP downloader
 
 ### python execution and debug
 Python interpreter: Docker compose -> GPU, Dockerfile -> nonGPU
